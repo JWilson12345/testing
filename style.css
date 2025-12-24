@@ -8,6 +8,10 @@
   --btn2:rgba(255,255,255,0.04);
   --primary:#2a76ff;
   --danger:#ff4d4d;
+
+  /* PB highlight */
+  --pbBorder: rgba(42,118,255,0.55);
+  --pbBg: rgba(42,118,255,0.10);
 }
 
 *{ box-sizing:border-box; }
@@ -89,15 +93,16 @@ body{
   line-height:1.4;
 }
 
-/* Challenge */
+/* Challenge (moved higher) */
 .hero{
   min-height: calc(100vh - 180px);
   display:flex;
   flex-direction:column;
-  justify-content:center;
+  justify-content:flex-start;     /* was center */
   align-items:center;
   text-align:center;
   gap:16px;
+  padding-top:56px;              /* pushes it higher */
 }
 .label{
   color:var(--muted);
@@ -160,11 +165,31 @@ button:disabled{
   cursor:not-allowed;
 }
 
+/* PB block under buttons */
 .pb{
-  margin-top:2px;
+  margin-top:6px;
+  min-height:34px;
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.35;
+  text-align:center;
+}
+.pb .pbTitle{
+  color:var(--muted);
+  font-size:12px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  margin-bottom:4px;
+}
+.pb .pbTime{
+  color:var(--text);
+  font-weight:900;
+  font-size:18px;
+}
+.pb .pbDate{
+  margin-top:4px;
   font-size:12px;
   color:var(--muted);
-  min-height:18px;
 }
 
 /* History controls */
@@ -244,6 +269,13 @@ button:disabled{
   border-radius:14px;
   background:rgba(0,0,0,0.12);
 }
+
+/* ✅ PB highlight */
+.row.pbRow{
+  border-color: var(--pbBorder);
+  background: var(--pbBg);
+}
+
 .rowLeft{
   display:flex;
   align-items:center;
@@ -262,6 +294,13 @@ button:disabled{
 .badge.good{ color:rgba(238,242,255,0.95); }
 .badge.bad{ color:rgba(238,242,255,0.95); }
 
+/* PB badge tint */
+.row.pbRow .badge{
+  border-color: var(--pbBorder);
+  background: rgba(42,118,255,0.12);
+  color: var(--text);
+}
+
 .rowMain{
   display:flex;
   flex-direction:column;
@@ -271,11 +310,6 @@ button:disabled{
   font-weight:850;
   font-size:13px;
   color:var(--text);
-}
-.rowSub{
-  font-size:12px;
-  color:var(--muted);
-  margin-top:3px;
 }
 
 .infoBtn{
@@ -335,15 +369,15 @@ button:disabled{
 .tabLabel{ font-size:11px; color:var(--muted); }
 .tab.active .tabLabel{ color:var(--text); }
 
-/* Modal */
+/* Modal (CENTERED) */
 .modalOverlay{
   position:fixed;
   inset:0;
   background:rgba(0,0,0,0.55);
   display:flex;
-  align-items:flex-end;
+  align-items:center;          /* was flex-end */
   justify-content:center;
-  padding:18px 14px calc(18px + env(safe-area-inset-bottom));
+  padding:18px 14px;
   z-index:10000;
 }
 .modalOverlay.hidden{ display:none; }
