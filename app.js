@@ -120,9 +120,28 @@ function fmtDuration(ms) {
 }
 
 function fmtFullDate(ts) {
-  // e.g. Wednesday, December 24, 2025
-  return new Date(ts).toLocaleDateString(undefined, { weekday:"long", year:"numeric", month:"long", day:"numeric" });
+  const d = new Date(ts);
+
+  const weekday = d.toLocaleDateString(undefined, { weekday: "short" }); // Wed
+  const dayNum = d.getDate();
+
+  function ordinal(n) {
+    if (n > 3 && n < 21) return "th";
+    switch (n % 10) {
+      case 1: return "st";
+      case 2: return "nd";
+      case 3: return "rd";
+      default: return "th";
+    }
+  }
+
+  const day = `${dayNum}${ordinal(dayNum)}`; // 24th
+  const month = d.toLocaleDateString(undefined, { month: "short" }); // Dec
+  const year = d.getFullYear();
+
+  return `${weekday} ${day} ${month} ${year}`;
 }
+
 
 function fmtTime(ts) {
   return new Date(ts).toLocaleTimeString(undefined, { hour:"2-digit", minute:"2-digit" });
@@ -602,3 +621,4 @@ function render() {
 render();
 maybeStartFromSentAt();
 setActiveTab("challenge");
+
