@@ -180,6 +180,30 @@ modalOverlay.addEventListener("click", (e) => {
   if (e.target === modalOverlay) closeModal();
 });
 
+/* ---------------- Confirmation helper ---------------- */
+function confirmAction(title, message, confirmText, onConfirm) {
+  openModal(
+    title,
+    `
+      <div class="kv">
+        <div class="k">Confirm</div>
+        <div class="v">${escapeHTML(message)}</div>
+      </div>
+    `,
+    `
+      <button class="ghost" id="confirmCancel">Cancel</button>
+      <button class="primary" id="confirmOk">${escapeHTML(confirmText)}</button>
+    `
+  );
+
+  document.getElementById("confirmCancel").addEventListener("click", closeModal);
+  document.getElementById("confirmOk").addEventListener("click", () => {
+    closeModal();
+    onConfirm();
+  });
+}
+
+
 /* ---------------- PB logic ---------------- */
 function computePBIdByChallenge() {
   // returns Map(challenge -> runId) for the best completed run per challenge
@@ -621,4 +645,5 @@ function render() {
 render();
 maybeStartFromSentAt();
 setActiveTab("challenge");
+
 
