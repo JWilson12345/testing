@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
-import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-messaging.js";
+import { getMessaging, getToken, deleteToken } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-messaging.js";
 
-// ---------------- Firebase (unchanged) ----------------
+/* ---------------- Firebase (unchanged) ---------------- */
 const firebaseConfig = {
   apiKey: "AIzaSyA88ORyr_9mU-lhTxL7fdp5uOiaI1frhAU",
   authDomain: "push-test-app-3cde4.firebaseapp.com",
@@ -13,7 +13,7 @@ const firebaseConfig = {
 
 const VAPID_KEY = "BFjdIfNLM0Y8If3k5MvNq9UFYnNmgMyO4ZTh58IXNn0ta_5OvTQvtLkKo8q1Bk74zZ8IpDNwgtHCuyNIkvmrmD8";
 
-// ---------------- App data ----------------
+/* ---------------- App data ---------------- */
 const CHALLENGES = [
   "100 push-ups",
   "100 squats",
@@ -26,9 +26,10 @@ const CHALLENGES = [
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
 const LS_ACTIVE = "deadline.active";
-const LS_HISTORY = "deadline.history"; // array of runs
+const LS_HISTORY = "deadline.history";
+const LS_NOTIF_ENABLED = "deadline.notifEnabled";
 
-// ---------------- UI refs ----------------
+/* ---------------- UI refs ---------------- */
 const statusText = document.getElementById("statusText");
 const challengeText = document.getElementById("challengeText");
 const timerText = document.getElementById("timerText");
@@ -43,38 +44,34 @@ const clearBtn = document.getElementById("clearBtn");
 const clearHistoryBtn = document.getElementById("clearHistoryBtn");
 
 const bellBtn = document.getElementById("bellBtn");
-const notifHint = document.getElementById("notifHint");
 
 const historyEmpty = document.getElementById("historyEmpty");
 const historyList = document.getElementById("historyList");
+const searchInput = document.getElementById("searchInput");
+const chips = Array.from(document.querySelectorAll(".chip"));
 
-// pages
 const pageChallenge = document.getElementById("page-challenge");
 const pageHistory = document.getElementById("page-history");
 const pageDev = document.getElementById("page-dev");
-
-// tabbar
 const tabbar = document.querySelector(".tabbar");
 const tabs = Array.from(document.querySelectorAll(".tab"));
 
-// ---------------- Helpers ----------------
+/* Modal */
+const modalOverlay = document.getElementById("modalOverlay");
+const modalTitle = document.getElementById("modalTitle");
+const modalBody = document.getElementById("modalBody");
+const modalActions = document.getElementById("modalActions");
+const modalCloseBtn = document.getElementById("modalCloseBtn");
+
+/* ---------------- State ---------------- */
+let historyFilter = "recent"; // recent | best
+let searchTerm = "";
+
+/* ---------------- Helpers ---------------- */
 function now() { return Date.now(); }
 
 function pickRandomChallenge() {
   return CHALLENGES[Math.floor(Math.random() * CHALLENGES.length)];
-}
-
-function fmtHMS(ms) {
-  const total = Math.max(0, Math.floor(ms / 1000));
-  const h = String(Math.floor(total / 3600)).padStart(2, "0");
-  const m = String(Math.floor((total % 3600) / 60)).padStart(2, "0");
-  const s = String(total % 60).padStart(2, "0");
-  return `${h}:${m}:${s}`;
-}
-
-function fmtLocal(ts) {
-  const d = new Date(ts);
-  return d.toLocaleString();
 }
 
 function loadJSON(key, fallback) {
@@ -85,56 +82,61 @@ function loadJSON(key, fallback) {
     return fallback;
   }
 }
-
 function saveJSON(key, val) {
   localStorage.setItem(key, JSON.stringify(val));
 }
-
 function clearKey(key) {
   localStorage.removeItem(key);
 }
 
-function getActive() {
-  return loadJSON(LS_ACTIVE, null);
-}
+function getActive() { return loadJSON(LS_ACTIVE, null); }
+function setActive(v) { saveJSON(LS_ACTIVE, v); }
+function clearActive() { clearKey(LS_ACTIVE); }
 
-function setActive(active) {
-  saveJSON(LS_ACTIVE, active);
-}
-
-function clearActive() {
-  clearKey(LS_ACTIVE);
-}
-
-function getHistory() {
-  return loadJSON(LS_HISTORY, []);
-}
-
-function setHistory(list) {
-  saveJSON(LS_HISTORY, list);
-}
+function getHistory() { return loadJSON(LS_HISTORY, []); }
+function setHistory(v) { saveJSON(LS_HISTORY, v); }
 
 function addToHistory(run) {
   const list = getHistory();
-  list.unshift(run); // newest first
+  list.unshift(run);
   setHistory(list);
 }
 
-function getPBForChallenge(name) {
-  const history = getHistory().filter(r => r.challenge === name && r.status === "completed");
-  if (history.length === 0) return null;
-  history.sort((a,b) => a.durationMs - b.durationMs);
-  return history[0];
-}
-
 function setStatusLabel(active) {
-  if (!active) {
-    statusText.textContent = "Waiting…";
-    return;
-  }
+  if (!active) { statusText.textContent = "Waiting…"; return; }
   if (active.status === "active") statusText.textContent = "Active (1 hour) ⏳";
   else if (active.status === "completed") statusText.textContent = "Completed ✅";
   else statusText.textContent = "Failed ❌";
+}
+
+/* Time formatting:
+   - if under 1 hour -> mm:ss
+   - else -> hh:mm:ss
+*/
+function fmtDuration(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+
+  if (h <= 0) return `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+}
+
+function fmtFullDate(ts) {
+  // Example: Monday 19 September 2025
+  const d = new Date(ts);
+  return d.toLocaleDateString(undefined, { weekday:"long", day:"numeric", month:"long", year:"numeric" });
+}
+
+function fmtTime(ts) {
+  const d = new Date(ts);
+  return d.toLocaleTimeString(undefined, { hour:"2-digit", minute:"2-digit" });
+}
+
+function daysSince(ts) {
+  const diff = now() - ts;
+  return Math.max(0, Math.floor(diff / (24*60*60*1000)));
 }
 
 function escapeHTML(str) {
@@ -146,7 +148,26 @@ function escapeHTML(str) {
     .replaceAll("'", "&#039;");
 }
 
-// ---------------- Core logic ----------------
+/* ---------------- Modal helpers ---------------- */
+function openModal(title, bodyHTML, actionsHTML = "") {
+  modalTitle.textContent = title;
+  modalBody.innerHTML = bodyHTML;
+  modalActions.innerHTML = actionsHTML;
+  modalOverlay.classList.remove("hidden");
+  modalOverlay.setAttribute("aria-hidden", "false");
+}
+function closeModal() {
+  modalOverlay.classList.add("hidden");
+  modalOverlay.setAttribute("aria-hidden", "true");
+  modalBody.innerHTML = "";
+  modalActions.innerHTML = "";
+}
+modalCloseBtn.addEventListener("click", closeModal);
+modalOverlay.addEventListener("click", (e) => {
+  if (e.target === modalOverlay) closeModal();
+});
+
+/* ---------------- Core logic ---------------- */
 function startNewChallenge(startAt) {
   const active = {
     challenge: pickRandomChallenge(),
@@ -167,7 +188,7 @@ function finishActive(status) {
   const finishedAt = now();
   const durationMs = Math.max(0, finishedAt - active.startAt);
 
-  active.status = status; // "completed" or "failed"
+  active.status = status; // completed / failed
   active.finishedAt = finishedAt;
   active.durationMs = durationMs;
 
@@ -196,32 +217,54 @@ function clearAllHistory() {
   renderPB();
 }
 
-// ---------------- Timer loop ----------------
+/* ---------------- PB logic ---------------- */
+function getPBForChallenge(name) {
+  const history = getHistory().filter(r => r.challenge === name && r.status === "completed");
+  if (history.length === 0) return null;
+  history.sort((a,b) => a.durationMs - b.durationMs);
+  return history[0];
+}
+
+function renderPB() {
+  const active = getActive();
+  if (!active) { pbText.textContent = ""; return; }
+
+  const pb = getPBForChallenge(active.challenge);
+  if (!pb) { pbText.textContent = ""; return; }
+
+  const pbDur = fmtDuration(pb.durationMs);
+  const pbDate = fmtFullDate(pb.finishedAt);
+  const since = daysSince(pb.finishedAt);
+
+  const sinceText = since === 0 ? "Today" : `${since} days since PB`;
+  pbText.textContent = `PB ${pbDur} • ${pbDate} • ${sinceText}`;
+}
+
+/* ---------------- Timer loop ---------------- */
 let timerInterval = null;
 
 function tick() {
   const active = getActive();
 
   if (!active) {
-    timerText.textContent = "--:--:--";
+    timerText.textContent = "--:--";
     return;
   }
 
   setStatusLabel(active);
 
   if (active.status !== "active") {
-    timerText.textContent = "00:00:00";
+    timerText.textContent = "00:00";
     return;
   }
 
   const left = active.endAt - now();
-
   if (left <= 0) {
     finishActive("failed");
     return;
   }
 
-  timerText.textContent = fmtHMS(left);
+  timerText.textContent = fmtDuration(left);
 }
 
 function ensureTimer() {
@@ -230,23 +273,7 @@ function ensureTimer() {
   tick();
 }
 
-// ---------------- Render ----------------
-function renderPB() {
-  const active = getActive();
-  if (!active) {
-    pbText.textContent = "";
-    return;
-  }
-
-  const pb = getPBForChallenge(active.challenge);
-  if (!pb) {
-    pbText.textContent = "";
-    return;
-  }
-
-  pbText.textContent = `PB: ${fmtHMS(pb.durationMs)} (finished ${new Date(pb.finishedAt).toLocaleTimeString()})`;
-}
-
+/* ---------------- Render: Challenge ---------------- */
 function renderChallenge() {
   const active = getActive();
 
@@ -255,14 +282,14 @@ function renderChallenge() {
     startedText.textContent = "—";
     completeBtn.disabled = true;
     failBtn.disabled = true;
-    pbText.textContent = "";
     statusText.textContent = "Waiting…";
-    timerText.textContent = "--:--:--";
+    timerText.textContent = "--:--";
+    pbText.textContent = "";
     return;
   }
 
   challengeText.textContent = active.challenge;
-  startedText.textContent = `Started: ${fmtLocal(active.startAt)}`;
+  startedText.textContent = `Started ${fmtTime(active.startAt)}`;
 
   completeBtn.disabled = active.status !== "active";
   failBtn.disabled = active.status !== "active";
@@ -271,8 +298,46 @@ function renderChallenge() {
   renderPB();
 }
 
+/* ---------------- Render: History ---------------- */
+function groupByChallenge(list) {
+  const map = new Map();
+  for (const r of list) {
+    if (!map.has(r.challenge)) map.set(r.challenge, []);
+    map.get(r.challenge).push(r);
+  }
+  return map;
+}
+
+function getFilteredHistory() {
+  let list = getHistory();
+
+  // Search
+  if (searchTerm) {
+    const s = searchTerm.toLowerCase();
+    list = list.filter(r => String(r.challenge).toLowerCase().includes(s));
+  }
+
+  if (historyFilter === "best") {
+    // One entry per challenge: best completed run (PB). If none completed, use best failed? (we’ll just skip)
+    const best = [];
+    const grouped = groupByChallenge(list);
+    for (const [challenge, runs] of grouped.entries()) {
+      const completed = runs.filter(r => r.status === "completed");
+      if (completed.length === 0) continue;
+      completed.sort((a,b) => a.durationMs - b.durationMs);
+      best.push(completed[0]);
+    }
+    // sort best by duration ascending
+    best.sort((a,b) => a.durationMs - b.durationMs);
+    return best;
+  }
+
+  // recent
+  return list;
+}
+
 function renderHistory() {
-  const list = getHistory();
+  const list = getFilteredHistory();
 
   if (!list || list.length === 0) {
     historyEmpty.style.display = "block";
@@ -282,33 +347,181 @@ function renderHistory() {
 
   historyEmpty.style.display = "none";
 
-  historyList.innerHTML = list.map((r) => {
-    const badge = r.status === "completed" ? "Completed" : "Failed";
-    const duration = fmtHMS(r.durationMs);
-    const finished = new Date(r.finishedAt).toLocaleString();
+  if (historyFilter === "best") {
+    // Minimal: grouped not needed because it's already “one per challenge”
+    historyList.innerHTML = renderGroups(groupByChallenge(list));
+  } else {
+    // Recent: group by challenge (push-ups group, squats group, etc)
+    historyList.innerHTML = renderGroups(groupByChallenge(list));
+  }
+
+  // attach info handlers
+  historyList.querySelectorAll("[data-info-id]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-info-id");
+      const run = getHistory().find(r => r.id === id);
+      if (!run) return;
+      openRunInfo(run);
+    });
+  });
+}
+
+function renderGroups(groupMap) {
+  // Sort group titles alphabetically for cleanliness
+  const groups = Array.from(groupMap.entries()).sort((a,b) => a[0].localeCompare(b[0]));
+
+  return groups.map(([challenge, runs]) => {
+    const total = runs.length;
+
+    // In each group show newest first
+    const sortedRuns = [...runs].sort((a,b) => b.finishedAt - a.finishedAt);
+
+    const body = sortedRuns.map(r => {
+      const isGood = r.status === "completed";
+      const badge = isGood ? "Done" : "Fail";
+      const dur = fmtDuration(r.durationMs);
+
+      // Minimal row:
+      // - badge + Time 45:47
+      // - info button for details
+      return `
+        <div class="row">
+          <div class="rowLeft">
+            <span class="badge ${isGood ? "good" : "bad"}">${badge}</span>
+            <div class="rowMain">
+              <div class="rowTop">Time ${dur}</div>
+              <div class="rowSub">${escapeHTML(fmtFullDate(r.finishedAt))}</div>
+            </div>
+          </div>
+          <button class="infoBtn" data-info-id="${escapeHTML(r.id)}" aria-label="Info">ⓘ</button>
+        </div>
+      `;
+    }).join("");
 
     return `
-      <div class="historyItem">
-        <div class="historyTop">
-          <div class="historyName">${escapeHTML(r.challenge)}</div>
-          <div class="badge">${badge}</div>
+      <div class="group">
+        <div class="groupHead">
+          <div class="groupTitle">${escapeHTML(challenge)}</div>
+          <div class="groupMeta">${total}</div>
         </div>
-        <div class="historyMeta">
-          <div>Time: ${duration}</div>
-          <div>Finished: ${escapeHTML(finished)}</div>
-        </div>
+        <div class="groupBody">${body}</div>
       </div>
     `;
   }).join("");
 }
 
-function render() {
-  renderChallenge();
-  renderHistory();
-  ensureTimer();
+/* Info modal for a run */
+function openRunInfo(run) {
+  const body = `
+    <div class="kv"><div class="k">Challenge</div><div class="v">${escapeHTML(run.challenge)}</div></div>
+    <div class="kv"><div class="k">Result</div><div class="v">${escapeHTML(run.status === "completed" ? "Completed" : "Failed")}</div></div>
+    <div class="kv"><div class="k">Time</div><div class="v">${escapeHTML(fmtDuration(run.durationMs))}</div></div>
+    <div class="kv"><div class="k">Started</div><div class="v">${escapeHTML(fmtFullDate(run.startAt))} • ${escapeHTML(fmtTime(run.startAt))}</div></div>
+    <div class="kv"><div class="k">Finished</div><div class="v">${escapeHTML(fmtFullDate(run.finishedAt))} • ${escapeHTML(fmtTime(run.finishedAt))}</div></div>
+  `;
+  openModal("Details", body, `<button class="ghost" id="closeInfoBtn">Close</button>`);
+  document.getElementById("closeInfoBtn").addEventListener("click", closeModal);
 }
 
-// ---------------- Start from notification click ----------------
+/* ---------------- Notifications popup ---------------- */
+/*
+  Reality check (simple, honest):
+  - Browsers do not allow “turn off notifications” like a normal app toggle.
+  - What we CAN do:
+    - Enable: request permission + register service worker + get token
+    - Disable: delete the FCM token + optionally unregister service worker
+  - If the user wants to fully block, they can also do iPhone Settings → Notifications.
+*/
+async function enableNotificationsFlow() {
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") {
+    saveJSON(LS_NOTIF_ENABLED, false);
+    return { ok:false, msg:"Not allowed (check iPhone notification settings)." };
+  }
+
+  const reg = await navigator.serviceWorker.register("service-worker.js");
+
+  const app = initializeApp(firebaseConfig);
+  const messaging = getMessaging(app);
+
+  const token = await getToken(messaging, {
+    vapidKey: VAPID_KEY,
+    serviceWorkerRegistration: reg
+  });
+
+  console.log("FCM Token:", token);
+  saveJSON(LS_NOTIF_ENABLED, true);
+  return { ok:true, msg:"Enabled ✅" };
+}
+
+async function disableNotificationsFlow() {
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    const app = initializeApp(firebaseConfig);
+    const messaging = getMessaging(app);
+
+    // delete token (best effort)
+    await deleteToken(messaging);
+
+    // optionally unregister SW (helps reduce background handling)
+    for (const r of regs) {
+      await r.unregister();
+    }
+
+    saveJSON(LS_NOTIF_ENABLED, false);
+    return { ok:true, msg:"Disabled ✅ (you can re-enable anytime)." };
+  } catch (e) {
+    console.error(e);
+    saveJSON(LS_NOTIF_ENABLED, false);
+    return { ok:false, msg:"Couldn’t fully disable (see console)." };
+  }
+}
+
+function openNotifModal() {
+  const enabled = loadJSON(LS_NOTIF_ENABLED, false);
+  const body = `
+    <div class="kv"><div class="k">Status</div><div class="v">${enabled ? "Enabled" : "Disabled"}</div></div>
+    <div class="kv"><div class="k">Note</div><div class="v">iPhone can also block in Settings.</div></div>
+  `;
+
+  const actions = `
+    <button class="ghost" id="notifClose">Close</button>
+    ${enabled
+      ? `<button class="danger" id="notifDisable">Disable</button>`
+      : `<button class="primary" id="notifEnable">Enable</button>`
+    }
+  `;
+
+  openModal("Notifications", body, actions);
+
+  document.getElementById("notifClose").addEventListener("click", closeModal);
+
+  const enableBtn = document.getElementById("notifEnable");
+  if (enableBtn) {
+    enableBtn.addEventListener("click", async () => {
+      enableBtn.disabled = true;
+      const res = await enableNotificationsFlow();
+      openModal("Notifications", `
+        <div class="kv"><div class="k">Result</div><div class="v">${escapeHTML(res.msg)}</div></div>
+      `, `<button class="primary" id="okBtn">OK</button>`);
+      document.getElementById("okBtn").addEventListener("click", closeModal);
+    });
+  }
+
+  const disableBtn = document.getElementById("notifDisable");
+  if (disableBtn) {
+    disableBtn.addEventListener("click", async () => {
+      disableBtn.disabled = true;
+      const res = await disableNotificationsFlow();
+      openModal("Notifications", `
+        <div class="kv"><div class="k">Result</div><div class="v">${escapeHTML(res.msg)}</div></div>
+      `, `<button class="primary" id="okBtn2">OK</button>`);
+      document.getElementById("okBtn2").addEventListener("click", closeModal);
+    });
+  }
+}
+
+/* ---------------- Start from notification click ---------------- */
 function maybeStartFromSentAt() {
   const url = new URL(window.location.href);
   const sentAtStr = url.searchParams.get("sentAt");
@@ -326,29 +539,7 @@ function maybeStartFromSentAt() {
   window.history.replaceState({}, "", url.toString());
 }
 
-// ---------------- Notifications permission ----------------
-async function enableNotificationsFlow() {
-  const permission = await Notification.requestPermission();
-  if (permission !== "granted") {
-    notifHint.textContent = "Notifications not allowed on this device.";
-    return;
-  }
-
-  const registration = await navigator.serviceWorker.register("service-worker.js");
-
-  const app = initializeApp(firebaseConfig);
-  const messaging = getMessaging(app);
-
-  const token = await getToken(messaging, {
-    vapidKey: VAPID_KEY,
-    serviceWorkerRegistration: registration
-  });
-
-  console.log("FCM Token:", token);
-  notifHint.textContent = "Notifications enabled ✅ (token printed in console)";
-}
-
-// ---------------- Tabs (reliable) ----------------
+/* ---------------- Tabs ---------------- */
 function setActiveTab(name) {
   pageChallenge.classList.toggle("hidden", name !== "challenge");
   pageHistory.classList.toggle("hidden", name !== "history");
@@ -357,14 +548,13 @@ function setActiveTab(name) {
   tabs.forEach(t => t.classList.toggle("active", t.dataset.tab === name));
 }
 
-// One click handler for the whole bar (super reliable)
 tabbar.addEventListener("click", (e) => {
   const btn = e.target.closest(".tab");
   if (!btn) return;
   setActiveTab(btn.dataset.tab);
 });
 
-// ---------------- Wire actions ----------------
+/* ---------------- Wiring ---------------- */
 completeBtn.addEventListener("click", () => finishActive("completed"));
 failBtn.addEventListener("click", () => finishActive("failed"));
 
@@ -372,16 +562,28 @@ simulateBtn.addEventListener("click", () => startNewChallenge(now()));
 clearBtn.addEventListener("click", clearEverythingActiveOnly);
 clearHistoryBtn.addEventListener("click", clearAllHistory);
 
-bellBtn.addEventListener("click", async () => {
-  try {
-    await enableNotificationsFlow();
-  } catch (e) {
-    console.error(e);
-    notifHint.textContent = "Error enabling notifications (see console).";
-  }
+bellBtn.addEventListener("click", openNotifModal);
+
+chips.forEach(c => {
+  c.addEventListener("click", () => {
+    chips.forEach(x => x.classList.toggle("active", x === c));
+    historyFilter = c.dataset.filter;
+    renderHistory();
+  });
 });
 
-// ---------------- Init ----------------
+searchInput.addEventListener("input", () => {
+  searchTerm = searchInput.value.trim();
+  renderHistory();
+});
+
+/* ---------------- Init ---------------- */
+function render() {
+  renderChallenge();
+  renderHistory();
+  ensureTimer();
+}
+
 render();
 maybeStartFromSentAt();
 setActiveTab("challenge");
