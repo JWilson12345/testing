@@ -1,28 +1,66 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Push Test App</title>
+  <meta charset="UTF-8" />
+  <title>Daily Challenge</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- Makes the site mobile-friendly -->
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-
-  <!-- Link to CSS -->
-  <link rel="stylesheet" href="style.css">
-
-  <!-- PWA manifest -->
   <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <header class="topbar">
+    <div class="title">Daily Challenge</div>
+    <div class="subtitle" id="statusText">Waiting…</div>
+  </header>
 
-  <h1>Push Notification Test</h1>
+  <main class="wrap">
+    <section class="card">
+      <div class="label">Today’s challenge</div>
+      <div class="challenge" id="challengeText">No active challenge yet.</div>
 
-  <p>This is a basic test app to check push notifications.</p>
+      <div class="timerRow">
+        <div class="timerBox">
+          <div class="small">Time left</div>
+          <div class="timer" id="timerText">--:--:--</div>
+        </div>
+        <div class="timerBox">
+          <div class="small">Started</div>
+          <div class="smallValue" id="startedText">—</div>
+        </div>
+      </div>
 
-  <button id="notifyBtn">Enable Notifications</button>
+      <div class="buttons">
+        <button id="completeBtn" class="primary" disabled>Complete ✅</button>
+        <button id="failBtn" class="ghost" disabled>Give up</button>
+      </div>
 
-  <!-- Main app logic (THIS MUST BE A MODULE) -->
+      <div class="divider"></div>
+
+      <div class="label">Testing / controls</div>
+      <p class="muted">
+        Use “Simulate new challenge” to test without waiting for a real push.
+        When you tap a real notification, the timer will start automatically.
+      </p>
+
+      <div class="buttons">
+        <button id="simulateBtn">Simulate new challenge</button>
+        <button id="clearBtn" class="ghost">Clear challenge</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="label">Notifications</div>
+      <p class="muted">
+        This button asks iPhone/Browser permission. You already have Firebase set up; this is just the on-device permission step.
+      </p>
+      <div class="buttons">
+        <button id="enableNotifBtn">Enable Notifications</button>
+      </div>
+      <p class="tiny muted" id="notifHint"></p>
+    </section>
+  </main>
+
   <script type="module" src="app.js"></script>
-
 </body>
 </html>
