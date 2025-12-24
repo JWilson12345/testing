@@ -613,8 +613,24 @@ tabbar.addEventListener("click", (e) => {
 });
 
 /* ---------------- Wiring ---------------- */
-completeBtn.addEventListener("click", () => finishActive("completed"));
-failBtn.addEventListener("click", () => finishActive("failed"));
+completeBtn.addEventListener("click", () => {
+  confirmAction(
+    "Complete Challenge",
+    "Are you sure you completed this challenge?",
+    "Complete",
+    () => finishActive("completed")
+  );
+});
+
+failBtn.addEventListener("click", () => {
+  confirmAction(
+    "Give Up",
+    "Are you sure you want to give up?",
+    "Give up",
+    () => finishActive("failed")
+  );
+});
+
 
 simulateBtn.addEventListener("click", () => startNewChallenge(now()));
 clearBtn.addEventListener("click", () => clearEverythingActiveOnly());
@@ -645,5 +661,6 @@ function render() {
 render();
 maybeStartFromSentAt();
 setActiveTab("challenge");
+
 
 
