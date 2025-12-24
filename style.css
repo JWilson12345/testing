@@ -1,11 +1,130 @@
-body {
-  font-family: Arial, sans-serif;
-  text-align: center;
-  padding: 40px;
+:root{
+  --bg:#0b0f17;
+  --card:#121a27;
+  --text:#eaf0ff;
+  --muted:#a8b3cc;
+  --line:#26314a;
+  --btn:#2a76ff;
+  --btn2:#1b2436;
+  --good:#2ecc71;
+  --bad:#ff4d4d;
 }
 
-button {
-  font-size: 18px;
-  padding: 12px 20px;
-  cursor: pointer;
+*{ box-sizing:border-box; }
+body{
+  margin:0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  background:var(--bg);
+  color:var(--text);
 }
+
+.topbar{
+  position:sticky;
+  top:0;
+  padding:16px 16px 12px;
+  background:rgba(11,15,23,0.92);
+  backdrop-filter: blur(10px);
+  border-bottom:1px solid var(--line);
+}
+.title{
+  font-size:18px;
+  font-weight:700;
+}
+.subtitle{
+  margin-top:4px;
+  font-size:13px;
+  color:var(--muted);
+}
+
+.wrap{
+  max-width:520px;
+  margin:0 auto;
+  padding:16px;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+
+.card{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:16px;
+}
+
+.label{
+  color:var(--muted);
+  font-size:12px;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  margin-bottom:8px;
+}
+.challenge{
+  font-size:22px;
+  font-weight:800;
+  line-height:1.2;
+  margin-bottom:14px;
+}
+
+.timerRow{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap:10px;
+  margin-bottom:14px;
+}
+.timerBox{
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(255,255,255,0.06);
+  border-radius:14px;
+  padding:12px;
+}
+.small{
+  font-size:12px;
+  color:var(--muted);
+  margin-bottom:6px;
+}
+.smallValue{
+  font-size:13px;
+  color:var(--text);
+}
+.timer{
+  font-size:26px;
+  font-weight:900;
+  letter-spacing:0.02em;
+}
+
+.buttons{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+}
+button{
+  border:none;
+  border-radius:14px;
+  padding:12px 14px;
+  font-size:15px;
+  cursor:pointer;
+  color:var(--text);
+  background:var(--btn2);
+  border:1px solid rgba(255,255,255,0.08);
+}
+button.primary{
+  background:var(--btn);
+  border:1px solid rgba(255,255,255,0.12);
+}
+button.ghost{
+  background:transparent;
+}
+button:disabled{
+  opacity:0.45;
+  cursor:not-allowed;
+}
+
+.divider{
+  height:1px;
+  background:var(--line);
+  margin:14px 0;
+}
+
+.muted{ color:var(--muted); font-size:13px; line-height:1.4; }
+.tiny{ font-size:12px; }
