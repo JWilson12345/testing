@@ -82,12 +82,8 @@ function loadJSON(key, fallback) {
     return fallback;
   }
 }
-function saveJSON(key, val) {
-  localStorage.setItem(key, JSON.stringify(val));
-}
-function clearKey(key) {
-  localStorage.removeItem(key);
-}
+function saveJSON(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
+function clearKey(key) { localStorage.removeItem(key); }
 
 function getActive() { return loadJSON(LS_ACTIVE, null); }
 function setActive(v) { saveJSON(LS_ACTIVE, v); }
@@ -110,7 +106,7 @@ function setStatusLabel(active) {
 }
 
 /* Time formatting:
-   - if under 1 hour -> mm:ss
+   - under 1 hour -> mm:ss
    - else -> hh:mm:ss
 */
 function fmtDuration(ms) {
@@ -124,14 +120,12 @@ function fmtDuration(ms) {
 }
 
 function fmtFullDate(ts) {
-  // Example: Monday 19 September 2025
-  const d = new Date(ts);
-  return d.toLocaleDateString(undefined, { weekday:"long", day:"numeric", month:"long", year:"numeric" });
+  // e.g. Wednesday, December 24, 2025
+  return new Date(ts).toLocaleDateString(undefined, { weekday:"long", year:"numeric", month:"long", day:"numeric" });
 }
 
 function fmtTime(ts) {
-  const d = new Date(ts);
-  return d.toLocaleTimeString(undefined, { hour:"2-digit", minute:"2-digit" });
+  return new Date(ts).toLocaleTimeString(undefined, { hour:"2-digit", minute:"2-digit" });
 }
 
 function daysSince(ts) {
@@ -167,6 +161,39 @@ modalOverlay.addEventListener("click", (e) => {
   if (e.target === modalOverlay) closeModal();
 });
 
+/* ---------------- PB logic ---------------- */
+function computePBIdByChallenge() {
+  // returns Map(challenge -> runId) for the best completed run per challenge
+  const history = getHistory();
+  const map = new Map();
+
+  for (const r of history) {
+    if (r.status !== "completed") continue;
+
+    const current = map.get(r.challenge);
+    if (!current) {
+      map.set(r.challenge, r);
+      continue;
+    }
+
+    // Smaller duration = better PB
+    if (r.durationMs < current.durationMs) map.set(r.challenge, r);
+    // If tie, keep the newer one as PB (optional)
+    else if (r.durationMs === current.durationMs && r.finishedAt > current.finishedAt) map.set(r.challenge, r);
+  }
+
+  const idMap = new Map();
+  for (const [k, v] of map.entries()) idMap.set(k, v.id);
+  return idMap;
+}
+
+function getPBForChallenge(name) {
+  const history = getHistory().filter(r => r.challenge === name && r.status === "completed");
+  if (history.length === 0) return null;
+  history.sort((a,b) => a.durationMs - b.durationMs || b.finishedAt - a.finishedAt);
+  return history[0];
+}
+
 /* ---------------- Core logic ---------------- */
 function startNewChallenge(startAt) {
   const active = {
@@ -181,6 +208,18 @@ function startNewChallenge(startAt) {
   render();
 }
 
+function openResultModal(run) {
+  // Center popup overview (same style as Details)
+  const body = `
+    <div class="kv"><div class="k">Challenge</div><div class="v">${escapeHTML(run.challenge)}</div></div>
+    <div class="kv"><div class="k">Result</div><div class="v">${escapeHTML(run.status === "completed" ? "Completed" : "Failed")}</div></div>
+    <div class="kv"><div class="k">Time</div><div class="v">${escapeHTML(fmtDuration(run.durationMs))}</div></div>
+    <div class="kv"><div class="k">Date</div><div class="v">${escapeHTML(fmtFullDate(run.finishedAt))}</div></div>
+  `;
+  openModal("Details", body, `<button class="primary" id="okBtn">OK</button>`);
+  document.getElementById("okBtn").addEventListener("click", closeModal);
+}
+
 function finishActive(status) {
   const active = getActive();
   if (!active || active.status !== "active") return;
@@ -188,22 +227,25 @@ function finishActive(status) {
   const finishedAt = now();
   const durationMs = Math.max(0, finishedAt - active.startAt);
 
-  active.status = status; // completed / failed
+  active.status = status;
   active.finishedAt = finishedAt;
   active.durationMs = durationMs;
 
   setActive(active);
 
-  addToHistory({
+  const run = {
     id: `${active.startAt}-${Math.random().toString(16).slice(2)}`,
     challenge: active.challenge,
     status: active.status,
     startAt: active.startAt,
     finishedAt: active.finishedAt,
     durationMs: active.durationMs
-  });
+  };
+
+  addToHistory(run);
 
   render();
+  openResultModal(run);
 }
 
 function clearEverythingActiveOnly() {
@@ -215,29 +257,6 @@ function clearAllHistory() {
   setHistory([]);
   renderHistory();
   renderPB();
-}
-
-/* ---------------- PB logic ---------------- */
-function getPBForChallenge(name) {
-  const history = getHistory().filter(r => r.challenge === name && r.status === "completed");
-  if (history.length === 0) return null;
-  history.sort((a,b) => a.durationMs - b.durationMs);
-  return history[0];
-}
-
-function renderPB() {
-  const active = getActive();
-  if (!active) { pbText.textContent = ""; return; }
-
-  const pb = getPBForChallenge(active.challenge);
-  if (!pb) { pbText.textContent = ""; return; }
-
-  const pbDur = fmtDuration(pb.durationMs);
-  const pbDate = fmtFullDate(pb.finishedAt);
-  const since = daysSince(pb.finishedAt);
-
-  const sinceText = since === 0 ? "Today" : `${since} days since PB`;
-  pbText.textContent = `PB ${pbDur} • ${pbDate} • ${sinceText}`;
 }
 
 /* ---------------- Timer loop ---------------- */
@@ -274,6 +293,26 @@ function ensureTimer() {
 }
 
 /* ---------------- Render: Challenge ---------------- */
+function renderPB() {
+  const active = getActive();
+  if (!active) {
+    pbText.innerHTML = "";
+    return;
+  }
+
+  const pb = getPBForChallenge(active.challenge);
+  if (!pb) {
+    pbText.innerHTML = "";
+    return;
+  }
+
+  pbText.innerHTML = `
+    <div class="pbTitle">Personal Best</div>
+    <div class="pbTime">${escapeHTML(fmtDuration(pb.durationMs))}</div>
+    <div class="pbDate">${escapeHTML(fmtFullDate(pb.finishedAt))}</div>
+  `;
+}
+
 function renderChallenge() {
   const active = getActive();
 
@@ -284,7 +323,7 @@ function renderChallenge() {
     failBtn.disabled = true;
     statusText.textContent = "Waiting…";
     timerText.textContent = "--:--";
-    pbText.textContent = "";
+    pbText.innerHTML = "";
     return;
   }
 
@@ -311,29 +350,25 @@ function groupByChallenge(list) {
 function getFilteredHistory() {
   let list = getHistory();
 
-  // Search
   if (searchTerm) {
     const s = searchTerm.toLowerCase();
     list = list.filter(r => String(r.challenge).toLowerCase().includes(s));
   }
 
   if (historyFilter === "best") {
-    // One entry per challenge: best completed run (PB). If none completed, use best failed? (we’ll just skip)
     const best = [];
     const grouped = groupByChallenge(list);
     for (const [challenge, runs] of grouped.entries()) {
       const completed = runs.filter(r => r.status === "completed");
       if (completed.length === 0) continue;
-      completed.sort((a,b) => a.durationMs - b.durationMs);
+      completed.sort((a,b) => a.durationMs - b.durationMs || b.finishedAt - a.finishedAt);
       best.push(completed[0]);
     }
-    // sort best by duration ascending
     best.sort((a,b) => a.durationMs - b.durationMs);
     return best;
   }
 
-  // recent
-  return list;
+  return list; // recent
 }
 
 function renderHistory() {
@@ -347,13 +382,8 @@ function renderHistory() {
 
   historyEmpty.style.display = "none";
 
-  if (historyFilter === "best") {
-    // Minimal: grouped not needed because it's already “one per challenge”
-    historyList.innerHTML = renderGroups(groupByChallenge(list));
-  } else {
-    // Recent: group by challenge (push-ups group, squats group, etc)
-    historyList.innerHTML = renderGroups(groupByChallenge(list));
-  }
+  const pbIdMap = computePBIdByChallenge();
+  historyList.innerHTML = renderGroups(groupByChallenge(list), pbIdMap);
 
   // attach info handlers
   historyList.querySelectorAll("[data-info-id]").forEach(btn => {
@@ -366,14 +396,11 @@ function renderHistory() {
   });
 }
 
-function renderGroups(groupMap) {
-  // Sort group titles alphabetically for cleanliness
+function renderGroups(groupMap, pbIdMap) {
   const groups = Array.from(groupMap.entries()).sort((a,b) => a[0].localeCompare(b[0]));
 
   return groups.map(([challenge, runs]) => {
     const total = runs.length;
-
-    // In each group show newest first
     const sortedRuns = [...runs].sort((a,b) => b.finishedAt - a.finishedAt);
 
     const body = sortedRuns.map(r => {
@@ -381,16 +408,15 @@ function renderGroups(groupMap) {
       const badge = isGood ? "Done" : "Fail";
       const dur = fmtDuration(r.durationMs);
 
-      // Minimal row:
-      // - badge + Time 45:47
-      // - info button for details
+      const isPB = pbIdMap.get(r.challenge) === r.id;
+      const rowClass = isPB ? "row pbRow" : "row";
+
       return `
-        <div class="row">
+        <div class="${rowClass}">
           <div class="rowLeft">
-            <span class="badge ${isGood ? "good" : "bad"}">${badge}</span>
+            <span class="badge ${isGood ? "good" : "bad"}">${badge}${isPB ? " • PB" : ""}</span>
             <div class="rowMain">
-              <div class="rowTop">Time ${dur}</div>
-              <div class="rowSub">${escapeHTML(fmtFullDate(r.finishedAt))}</div>
+              <div class="rowTop">Time ${escapeHTML(dur)}</div>
             </div>
           </div>
           <button class="infoBtn" data-info-id="${escapeHTML(r.id)}" aria-label="Info">ⓘ</button>
@@ -410,33 +436,24 @@ function renderGroups(groupMap) {
   }).join("");
 }
 
-/* Info modal for a run */
+/* Details modal format (no times, date only) */
 function openRunInfo(run) {
   const body = `
     <div class="kv"><div class="k">Challenge</div><div class="v">${escapeHTML(run.challenge)}</div></div>
     <div class="kv"><div class="k">Result</div><div class="v">${escapeHTML(run.status === "completed" ? "Completed" : "Failed")}</div></div>
     <div class="kv"><div class="k">Time</div><div class="v">${escapeHTML(fmtDuration(run.durationMs))}</div></div>
-    <div class="kv"><div class="k">Started</div><div class="v">${escapeHTML(fmtFullDate(run.startAt))} • ${escapeHTML(fmtTime(run.startAt))}</div></div>
-    <div class="kv"><div class="k">Finished</div><div class="v">${escapeHTML(fmtFullDate(run.finishedAt))} • ${escapeHTML(fmtTime(run.finishedAt))}</div></div>
+    <div class="kv"><div class="k">Date</div><div class="v">${escapeHTML(fmtFullDate(run.finishedAt))}</div></div>
   `;
   openModal("Details", body, `<button class="ghost" id="closeInfoBtn">Close</button>`);
   document.getElementById("closeInfoBtn").addEventListener("click", closeModal);
 }
 
 /* ---------------- Notifications popup ---------------- */
-/*
-  Reality check (simple, honest):
-  - Browsers do not allow “turn off notifications” like a normal app toggle.
-  - What we CAN do:
-    - Enable: request permission + register service worker + get token
-    - Disable: delete the FCM token + optionally unregister service worker
-  - If the user wants to fully block, they can also do iPhone Settings → Notifications.
-*/
 async function enableNotificationsFlow() {
   const permission = await Notification.requestPermission();
   if (permission !== "granted") {
     saveJSON(LS_NOTIF_ENABLED, false);
-    return { ok:false, msg:"Not allowed (check iPhone notification settings)." };
+    return { ok:false, msg:"Not allowed (check iPhone settings)." };
   }
 
   const reg = await navigator.serviceWorker.register("service-worker.js");
@@ -460,16 +477,12 @@ async function disableNotificationsFlow() {
     const app = initializeApp(firebaseConfig);
     const messaging = getMessaging(app);
 
-    // delete token (best effort)
     await deleteToken(messaging);
 
-    // optionally unregister SW (helps reduce background handling)
-    for (const r of regs) {
-      await r.unregister();
-    }
+    for (const r of regs) await r.unregister();
 
     saveJSON(LS_NOTIF_ENABLED, false);
-    return { ok:true, msg:"Disabled ✅ (you can re-enable anytime)." };
+    return { ok:true, msg:"Disabled ✅" };
   } catch (e) {
     console.error(e);
     saveJSON(LS_NOTIF_ENABLED, false);
@@ -479,9 +492,9 @@ async function disableNotificationsFlow() {
 
 function openNotifModal() {
   const enabled = loadJSON(LS_NOTIF_ENABLED, false);
+
   const body = `
     <div class="kv"><div class="k">Status</div><div class="v">${enabled ? "Enabled" : "Disabled"}</div></div>
-    <div class="kv"><div class="k">Note</div><div class="v">iPhone can also block in Settings.</div></div>
   `;
 
   const actions = `
@@ -501,9 +514,10 @@ function openNotifModal() {
     enableBtn.addEventListener("click", async () => {
       enableBtn.disabled = true;
       const res = await enableNotificationsFlow();
-      openModal("Notifications", `
-        <div class="kv"><div class="k">Result</div><div class="v">${escapeHTML(res.msg)}</div></div>
-      `, `<button class="primary" id="okBtn">OK</button>`);
+      openModal("Notifications",
+        `<div class="kv"><div class="k">Result</div><div class="v">${escapeHTML(res.msg)}</div></div>`,
+        `<button class="primary" id="okBtn">OK</button>`
+      );
       document.getElementById("okBtn").addEventListener("click", closeModal);
     });
   }
@@ -513,9 +527,10 @@ function openNotifModal() {
     disableBtn.addEventListener("click", async () => {
       disableBtn.disabled = true;
       const res = await disableNotificationsFlow();
-      openModal("Notifications", `
-        <div class="kv"><div class="k">Result</div><div class="v">${escapeHTML(res.msg)}</div></div>
-      `, `<button class="primary" id="okBtn2">OK</button>`);
+      openModal("Notifications",
+        `<div class="kv"><div class="k">Result</div><div class="v">${escapeHTML(res.msg)}</div></div>`,
+        `<button class="primary" id="okBtn2">OK</button>`
+      );
       document.getElementById("okBtn2").addEventListener("click", closeModal);
     });
   }
@@ -559,8 +574,8 @@ completeBtn.addEventListener("click", () => finishActive("completed"));
 failBtn.addEventListener("click", () => finishActive("failed"));
 
 simulateBtn.addEventListener("click", () => startNewChallenge(now()));
-clearBtn.addEventListener("click", clearEverythingActiveOnly);
-clearHistoryBtn.addEventListener("click", clearAllHistory);
+clearBtn.addEventListener("click", () => clearEverythingActiveOnly());
+clearHistoryBtn.addEventListener("click", () => clearAllHistory());
 
 bellBtn.addEventListener("click", openNotifModal);
 
