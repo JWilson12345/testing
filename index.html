@@ -2,64 +2,95 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Daily Challenge</title>
+  <title>Deadline</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+
   <header class="topbar">
-    <div class="title">Daily Challenge</div>
-    <div class="subtitle" id="statusText">Waiting…</div>
+    <div class="brand">
+      <div class="appname">Deadline</div>
+      <div class="status" id="statusText">Waiting…</div>
+    </div>
+
+    <!-- Bell = notifications/settings shortcut -->
+    <button class="iconBtn" id="bellBtn" aria-label="Notifications">
+      <!-- simple bell icon (SVG) -->
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm7-6V11a7 7 0 1 0-14 0v5l-2 2v1h18v-1l-2-2Zm-2 .17 1 1V18H6v-.83l1-1V11a5 5 0 1 1 10 0v5.17Z"></path>
+      </svg>
+    </button>
   </header>
 
-  <main class="wrap">
-    <section class="card">
-      <div class="label">Today’s challenge</div>
-      <div class="challenge" id="challengeText">No active challenge yet.</div>
+  <main class="main">
 
-      <div class="timerRow">
-        <div class="timerBox">
-          <div class="small">Time left</div>
+    <!-- CHALLENGE PAGE -->
+    <section class="page" id="page-challenge">
+      <div class="hero">
+        <div class="label">Today</div>
+        <div class="challenge" id="challengeText">No active challenge yet.</div>
+
+        <div class="timerBlock">
           <div class="timer" id="timerText">--:--:--</div>
+          <div class="meta">
+            <span id="startedText">—</span>
+          </div>
         </div>
-        <div class="timerBox">
-          <div class="small">Started</div>
-          <div class="smallValue" id="startedText">—</div>
+
+        <div class="actions">
+          <button id="completeBtn" class="primary" disabled>Complete</button>
+          <button id="failBtn" class="ghost" disabled>Give up</button>
         </div>
+
+        <div class="pb" id="pbText"></div>
       </div>
+    </section>
 
-      <div class="buttons">
-        <button id="completeBtn" class="primary" disabled>Complete ✅</button>
-        <button id="failBtn" class="ghost" disabled>Give up</button>
+    <!-- HISTORY PAGE -->
+    <section class="page hidden" id="page-history">
+      <div class="pageTitle">History</div>
+      <div class="muted">Your completed/failed challenges on this device.</div>
+
+      <div class="historyWrap">
+        <div id="historyEmpty" class="muted">No history yet.</div>
+        <div id="historyList" class="historyList"></div>
       </div>
+    </section>
 
-      <div class="divider"></div>
+    <!-- DEV PAGE -->
+    <section class="page hidden" id="page-dev">
+      <div class="pageTitle">Dev</div>
+      <div class="muted">Testing tools (temporary).</div>
 
-      <div class="label">Testing / controls</div>
-      <p class="muted">
-        Use “Simulate new challenge” to test without waiting for a real push.
-        When you tap a real notification, the timer will start automatically.
-      </p>
-
-      <div class="buttons">
+      <div class="devCard">
         <button id="simulateBtn">Simulate new challenge</button>
-        <button id="clearBtn" class="ghost">Clear challenge</button>
+        <button id="clearBtn" class="ghost">Clear current challenge</button>
+        <button id="clearHistoryBtn" class="ghost danger">Clear history</button>
+
+        <div class="hint" id="notifHint"></div>
       </div>
     </section>
 
-    <section class="card">
-      <div class="label">Notifications</div>
-      <p class="muted">
-        This button asks iPhone/Browser permission. You already have Firebase set up; this is just the on-device permission step.
-      </p>
-      <div class="buttons">
-        <button id="enableNotifBtn">Enable Notifications</button>
-      </div>
-      <p class="tiny muted" id="notifHint"></p>
-    </section>
   </main>
+
+  <!-- Bottom hotbar -->
+  <nav class="tabbar" aria-label="Navigation">
+    <button class="tab active" data-tab="challenge">
+      <span class="tabIcon">⚡</span>
+      <span class="tabLabel">Challenge</span>
+    </button>
+    <button class="tab" data-tab="history">
+      <span class="tabIcon">🕒</span>
+      <span class="tabLabel">History</span>
+    </button>
+    <button class="tab" data-tab="dev">
+      <span class="tabIcon">🧪</span>
+      <span class="tabLabel">Dev</span>
+    </button>
+  </nav>
 
   <script type="module" src="app.js"></script>
 </body>
